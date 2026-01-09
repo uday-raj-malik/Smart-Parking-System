@@ -4,3 +4,4 @@ numpy
 streamlit
 pandas
 deep-sort-realtime
+easyocr
