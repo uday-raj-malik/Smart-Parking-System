@@ -2,6 +2,7 @@ import re
 import cv2
 import easyocr
 import os
+from datetime import datetime
 from ultralytics import YOLO
 
 from detection.vehicle_detector import VehicleDetector
@@ -18,9 +19,18 @@ def clean_plate_text(text):
     text = re.sub(r'[^A-Z0-9]', '', text)
     return text
 
+def get_vehicle_identity(track_id, vehicle_plate_map):
+    """
+    Returns the best available identity for this vehicle.
+    Plate number is preferred over track_id as it's a permanent identifier.
+    """
+    if track_id in vehicle_plate_map:
+        return vehicle_plate_map[track_id]  # Use plate number as permanent ID
+    return f"UNKNOWN_{track_id}"  # Temporary ID until plate is detected (matches CSV logger format)
+
 
 def is_valid_plate(text):
-    pattern = r'^[A-Z]{2}[0-9]{5}$'
+    pattern = r'^[A-Z]{1}[0-9]{3}[A-Z]{2}$'
     return re.match(pattern, text)
 
 
@@ -41,12 +51,14 @@ def main():
     SENDER_PASSWORD = "ldzr svoz qvhu cort"
     RECEIVER_EMAIL = "gaoka123789@gmail.com"
     
-    # CSV logging configuration
-    CSV_LOG_PATH = os.path.join(project_root, "parking_logs.csv")
+    # CSV logging configuration - create file with date/time
+    start_time = datetime.now()
+    csv_filename = f"parking_log_{start_time.strftime('%Y%m%d_%H%M%S')}.csv"
+    CSV_LOG_PATH = os.path.join(project_root, csv_filename)
 
     CAMERA_INDEX = 1  # Change to 0 for default camera, or use video file path like "vid.mp4"
-    USE_VIDEO_FILE = True  # Set to True and provide VIDEO_PATH to use video file instead
-    VIDEO_PATH = os.path.join(project_root, "vid3_.mp4")  # Path to video file
+    USE_VIDEO_FILE = False  # Set to True and provide VIDEO_PATH to use video file instead
+    VIDEO_PATH = os.path.join(project_root, "demo3.mp4")  # Path to video file
 
     # -------- ALERT SYSTEM --------
     alert_manager = AlertManager(
@@ -81,11 +93,14 @@ def main():
 
     counter = VehicleCounter(MAX_CAPACITY)
 
-    # Store detected plate per vehicle ID
+    # Store detected plate per vehicle track_id: {track_id: plate_number}
     vehicle_plate_map = {}
     
-    # Store vehicle ID to plate mapping for tracking entry/exit
-    vehicle_entry_status = {}  # {track_id: {'plate': plate_number, 'entered': bool}}
+    # Store track_id to temporary ID mapping (for vehicles without detected plates)
+    track_to_temp_id = {}  # {track_id: "UNKNOWN_123"}
+    
+    # Store entry status using plate number (or temp ID) as key: {identity: {'plate': plate_number, 'entered': bool, 'entry_time': datetime, 'track_id': track_id}}
+    vehicle_entry_status = {}  # Uses plate number or UNKNOWN_id as key
 
     # -------- CAMERA/VIDEO --------
     if USE_VIDEO_FILE:
@@ -143,63 +158,89 @@ def main():
 
             # ---------- LINE CROSSING ----------
             cy = (y1 + y2) // 2
-            event = line_cross.check(track_id, cy)
+            
+            # Get or create identity for this vehicle (plate number preferred)
+            plate_number = vehicle_plate_map.get(track_id, None)
+            if plate_number:
+                identity = plate_number  # Use plate number as permanent identifier
+            else:
+                # Use temporary ID if plate not detected yet (matches CSV logger format)
+                if track_id not in track_to_temp_id:
+                    track_to_temp_id[track_id] = f"UNKNOWN_{track_id}"
+                identity = track_to_temp_id[track_id]
+            
+            event = line_cross.check(identity, cy)
 
             if event:
-                # Get plate number for this vehicle (if available)
-                plate_number = vehicle_plate_map.get(track_id, None)
-                
                 if event == "ENTRY":
                     counter.process_event(event)
-                    capacity_checker.check(counter.get_count())
                     
-                    # Log entry to CSV if plate is detected
-                    if plate_number:
-                        success, msg, entry_time = csv_logger.log_entry(plate_number)
-                        if success:
-                            vehicle_entry_status[track_id] = {
-                                'plate': plate_number,
-                                'entered': True
-                            }
-                            last_event_msg = f"{plate_number}: ENTRY | {entry_time.strftime('%H:%M:%S') if entry_time else ''}"
-                        else:
-                            last_event_msg = f"Vehicle {track_id}: ENTRY (No Plate)"
+                    # Check if this vehicle (by identity) has already entered
+                    if identity in vehicle_entry_status and vehicle_entry_status[identity].get('entered', False):
+                        print(f"⚠️ WARNING: {identity} is already recorded as entered!")
+                        last_event_msg = f"{identity}: ENTRY DUPLICATE (Already entered)"
                     else:
-                        # Vehicle entered but plate not detected yet
-                        if track_id not in vehicle_entry_status:
-                            vehicle_entry_status[track_id] = {'plate': None, 'entered': True}
-                        last_event_msg = f"Vehicle {track_id}: ENTRY (Plate detecting...)"
+                        # Log entry to CSV immediately (even without plate)
+                        success, msg, entry_time = csv_logger.log_entry(plate_number=plate_number, track_id=track_id)
+                        
+                        if success:
+                            vehicle_entry_status[identity] = {
+                                'plate': plate_number,
+                                'entered': True,
+                                'entry_time': entry_time,
+                                'track_id': track_id  # Keep track_id for reference
+                            }
+                            
+                            # Check capacity and send alert with plate number and entry time
+                            capacity_checker.check(
+                                counter.get_count(),
+                                plate_number=plate_number if plate_number else identity,
+                                entry_time=entry_time
+                            )
+                            
+                            if plate_number:
+                                last_event_msg = f"{plate_number}: ENTRY | {entry_time.strftime('%H:%M:%S') if entry_time else ''}"
+                            else:
+                                last_event_msg = f"{identity}: ENTRY | {entry_time.strftime('%H:%M:%S') if entry_time else ''} (Plate detecting...)"
+                        else:
+                            last_event_msg = f"{identity}: ENTRY ERROR - {msg}"
+                            # Still check capacity even if logging failed
+                            capacity_checker.check(counter.get_count())
                 
                 elif event == "EXIT":
-                    # Validate: Check if vehicle has really entered
-                    if track_id not in vehicle_entry_status or not vehicle_entry_status[track_id].get('entered', False):
-                        print(f"⚠️ WARNING: Vehicle {track_id} trying to exit without entry record!")
-                        last_event_msg = f"Vehicle {track_id}: EXIT REJECTED (No entry record)"
+                    # Validate: Check if vehicle has really entered (using identity/plate number)
+                    if identity not in vehicle_entry_status or not vehicle_entry_status[identity].get('entered', False):
+                        print(f"⚠️ WARNING: {identity} trying to exit without entry record!")
+                        last_event_msg = f"{identity}: EXIT REJECTED (No entry record)"
+                        alert_manager.send_illegal_parking_alert(identity, datetime.now())
                     else:
                         counter.process_event(event)
                         
-                        # Try to get plate number from entry status if not in current map
-                        if not plate_number and track_id in vehicle_entry_status:
-                            plate_number = vehicle_entry_status[track_id].get('plate', None)
+                        # Get plate number from entry status (might have been updated after entry)
+                        entry_info = vehicle_entry_status[identity]
+                        exit_plate_number = entry_info.get('plate') or plate_number
                         
-                        # Log exit to CSV if plate is detected
-                        if plate_number:
-                            success, msg, exit_data = csv_logger.log_exit(plate_number)
-                            if success:
-                                last_event_msg = (f"{plate_number}: EXIT | "
-                                                f"Fare: ₹{exit_data['Fare (₹)']} | "
-                                                f"Duration: {exit_data['Duration (hours)']:.2f}h")
-                                # Remove from entry status
-                                if track_id in vehicle_entry_status:
-                                    del vehicle_entry_status[track_id]
-                            else:
-                                last_event_msg = f"{plate_number}: EXIT ERROR - {msg}"
+                        # Log exit to CSV using the plate number from entry record
+                        success, msg, exit_data = csv_logger.log_exit(
+                            plate_number=exit_plate_number, 
+                            track_id=entry_info.get('track_id', track_id)
+                        )
+                        
+                        if success:
+                            identifier = exit_plate_number if exit_plate_number else identity
+                            last_event_msg = (f"{identifier}: EXIT | "
+                                            f"Fare: ₹{exit_data['Fare (₹)']} | "
+                                            f"Duration: {exit_data['Duration (hours)']:.2f}h")
                         else:
-                            # Exit without plate - still process counter but warn
-                            print(f"⚠️ WARNING: Vehicle {track_id} exiting without plate detection!")
-                            last_event_msg = f"Vehicle {track_id}: EXIT (No Plate - Not logged)"
-                            if track_id in vehicle_entry_status:
-                                del vehicle_entry_status[track_id]
+                            identifier = exit_plate_number if exit_plate_number else identity
+                            last_event_msg = f"{identifier}: EXIT ERROR - {msg}"
+                        
+                        # Remove from entry status
+                        if identity in vehicle_entry_status:
+                            del vehicle_entry_status[identity]
+                        # Clean up temp ID mapping if it exists
+                        if track_id in track_to_temp_id:
+                            del track_to_temp_id[track_id]
                 
                 event_timer = 30
                 print(f"📢 {last_event_msg}")
@@ -267,37 +308,70 @@ def main():
                                     vehicle_plate_map[track_id] = plate_text
                                     print(f"🚗 Plate Detected: {plate_text} for Vehicle ID: {track_id}")
                                     
-                                    # If vehicle has already entered, update entry status with plate
-                                    if track_id in vehicle_entry_status:
-                                        vehicle_entry_status[track_id]['plate'] = plate_text
-                                        # Log entry if vehicle already crossed line but plate wasn't detected then
-                                        if vehicle_entry_status[track_id].get('entered', False):
-                                            success, msg, entry_time = csv_logger.log_entry(plate_text)
-                                            if success:
-                                                print(f"📝 Late entry log: {msg}")
+                                    # Check if this vehicle has already entered with a temporary ID
+                                    temp_id = track_to_temp_id.get(track_id)
+                                    if temp_id and temp_id in vehicle_entry_status:
+                                        # Vehicle entered before plate was detected - migrate to plate-based tracking
+                                        entry_info = vehicle_entry_status.pop(temp_id)  # Remove old temp entry
+                                        
+                                        # Update entry status with plate number as key
+                                        vehicle_entry_status[plate_text] = {
+                                            'plate': plate_text,
+                                            'entered': entry_info.get('entered', True),
+                                            'entry_time': entry_info.get('entry_time'),
+                                            'track_id': track_id
+                                        }
+                                        
+                                        # Update line crossing state to use plate number
+                                        if temp_id in line_cross.states:
+                                            line_cross.states[plate_text] = line_cross.states.pop(temp_id)
+                                        
+                                        # Update CSV with plate number
+                                        old_identifier = f"UNKNOWN_{track_id}"
+                                        entry_time = entry_info.get('entry_time')
+                                        if entry_time:
+                                            csv_logger.update_plate_number(old_identifier, plate_text, entry_time=entry_time)
+                                            print(f"📝 Migrated entry record: {temp_id} -> {plate_text}")
+                                            print(f"📝 Updated plate number in CSV: {old_identifier} -> {plate_text}")
+                                        
+                                        # Clean up temp ID
+                                        del track_to_temp_id[track_id]
+                                    else:
+                                        # Vehicle hasn't entered yet, just store the plate
+                                        print(f"✅ Plate {plate_text} stored for Vehicle ID: {track_id} (awaiting entry)")
                                 else:
                                     print(f"⚠️ Invalid plate format: {plate_text}")
                 except Exception as e:
                     print(f"⚠️ Error during plate detection for vehicle {track_id}: {e}")
 
             # ---------- DRAW PLATE TEXT (Display prominently when detected) ----------
-            if track_id in vehicle_plate_map:
-                plate_number = vehicle_plate_map[track_id]
-                
-                # Display plate number prominently below vehicle
+            # Get identity for display
+            plate_number = vehicle_plate_map.get(track_id, None)
+            if plate_number:
+                identity = plate_number
+            else:
+                identity = track_to_temp_id.get(track_id, f"UNKNOWN_{track_id}")
+            
+            # Display plate number if detected, otherwise show identity
+            if plate_number:
                 cv2.putText(frame, f"Plate: {plate_number}",
                             (x1, y2 + 25),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                             (0, 255, 255), 2)
-                
-                # Show entry status if available
-                if track_id in vehicle_entry_status and vehicle_entry_status[track_id].get('entered', False):
-                    status_text = "PARKED"
-                    status_color = (0, 255, 0)  # Green
-                    cv2.putText(frame, status_text,
-                                (x1, y2 + 45),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                                status_color, 2)
+            else:
+                cv2.putText(frame, f"ID: {identity}",
+                            (x1, y2 + 25),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                            (128, 128, 128), 2)
+            
+            # Show entry status if available (check by identity, not track_id)
+            if identity in vehicle_entry_status and vehicle_entry_status[identity].get('entered', False):
+                status_text = "PARKED"
+                status_color = (0, 255, 0)  # Green
+                cv2.putText(frame, status_text,
+                            (x1, y2 + 45),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                            status_color, 2)
 
         # ---------- EVENT MESSAGE ----------
         if event_timer > 0:
@@ -314,8 +388,8 @@ def main():
                     cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
         
         # Display CSV log file location (top right)
-        csv_info = "Log: parking_logs.csv"
-        cv2.putText(frame, csv_info, (width - 250, 30),
+        csv_filename_display = os.path.basename(CSV_LOG_PATH)
+        cv2.putText(frame, f"Log: {csv_filename_display}", (width - 300, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         # Display hourly rate
@@ -330,6 +404,22 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
+    
+    # -------- SEND CSV REPORT AT END --------
+    print("\n" + "="*50)
+    print("📊 Program ending - Sending CSV report...")
+    print("="*50)
+    
+    if os.path.exists(CSV_LOG_PATH):
+        success = alert_manager.send_csv_report(CSV_LOG_PATH)
+        if success:
+            print(f"✅ CSV report sent successfully: {os.path.basename(CSV_LOG_PATH)}")
+        else:
+            print(f"⚠️ Failed to send CSV report, but file is saved at: {CSV_LOG_PATH}")
+    else:
+        print(f"⚠️ CSV file not found: {CSV_LOG_PATH}")
+    
+    print("👋 Program terminated.")
 
 
 if __name__ == "__main__":

@@ -1,31 +1,27 @@
 class LineCrossing:
-    def __init__(self, line_y):
+    def __init__(self, line_y, margin=15):
         self.line_y = line_y
-        # Stores the last known Y position for each vehicle ID
-        # Format: { vehicle_id : y_position }
-        self.previous_positions = {}
+        self.margin = margin
+        self.states = {}  # entity_id -> "ABOVE" | "BELOW"
 
-    def check(self, id, current_y):
-        # If we haven't seen this car before, just store its position
-        if id not in self.previous_positions:
-            self.previous_positions[id] = current_y
+    def check(self, entity_id, cy):
+        current_state = "ABOVE" if cy < self.line_y else "BELOW"
+
+        if entity_id not in self.states:
+            self.states[entity_id] = current_state
             return None
 
-        prev_y = self.previous_positions[id]
+        prev_state = self.states[entity_id]
 
-        # Update the position for next time
-        self.previous_positions[id] = current_y
+        if abs(cy - self.line_y) < self.margin:
+            return None
 
-        # --- LOGIC FOR CROSSING ---
+        if prev_state == "ABOVE" and current_state == "BELOW":
+            self.states[entity_id] = current_state
+            return "ENTRY"
 
-        # Case 1: Moving DOWN (Top to Bottom)
-        # Previous Y was above line, Current Y is below line
-        if prev_y < self.line_y and current_y >= self.line_y:
-            return "ENTRY"  # Assuming entering is moving down
-
-        # Case 2: Moving UP (Bottom to Top)
-        # Previous Y was below line, Current Y is above line
-        if prev_y > self.line_y and current_y <= self.line_y:
-            return "EXIT"  # Assuming exiting is moving up
+        if prev_state == "BELOW" and current_state == "ABOVE":
+            self.states[entity_id] = current_state
+            return "EXIT"
 
         return None
