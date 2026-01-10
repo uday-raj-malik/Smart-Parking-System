@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import json
 from datetime import datetime
 from typing import Optional, Tuple, Dict
 
@@ -9,22 +10,38 @@ class ParkingCSVLogger:
     Manages CSV logging of parking entries and exits with fare calculation.
     """
     
-    def __init__(self, csv_path: str, hourly_rate: float = 50.0):
+    def __init__(self, csv_path: str, hourly_rate: float = 50.0, config_file_path: str = None):
         """
         Initialize CSV logger.
         
         Args:
             csv_path: Path to CSV file
-            hourly_rate: Parking fee per hour in rupees
+            hourly_rate: Parking fee per hour in rupees (initial value, will reload from config if available)
+            config_file_path: Path to config.json file for dynamic rate reloading (optional)
         """
         self.csv_path = csv_path
         self.hourly_rate = hourly_rate
+        self.config_file_path = config_file_path  # Store config file path for dynamic reloading
         
         # Track active parking sessions: {plate_number: entry_datetime}
         self.active_sessions: Dict[str, datetime] = {}
         
         # Initialize CSV file with headers if it doesn't exist
         self._initialize_csv()
+    
+    def _reload_hourly_rate_from_config(self) -> float:
+        """Reload hourly rate from config.json file if available, otherwise return current rate."""
+        if self.config_file_path and os.path.exists(self.config_file_path):
+            try:
+                with open(self.config_file_path, 'r') as f:
+                    config = json.load(f)
+                    new_rate = config.get('hourly_rate', self.hourly_rate)
+                    self.hourly_rate = float(new_rate)  # Update stored rate
+                    return self.hourly_rate
+            except Exception as e:
+                # If config read fails, use current rate
+                pass
+        return self.hourly_rate
     
     def _initialize_csv(self):
         """Create CSV file with headers if it doesn't exist."""
@@ -122,16 +139,19 @@ class ParkingCSVLogger:
         entry_time = self.active_sessions.pop(identifier)
         exit_time = datetime.now()
         
+        # Reload hourly rate from config to use latest MCD UI settings
+        current_hourly_rate = self._reload_hourly_rate_from_config()
+        
         # Calculate duration
         duration = exit_time - entry_time
         duration_hours = duration.total_seconds() / 3600.0
         
-        # Calculate fare (minimum charge for 1 hour, then hourly rate)
+        # Calculate fare (minimum charge for 1 hour, then hourly rate from MCD settings)
         if duration_hours < 1.0:
-            fare = self.hourly_rate  # Minimum 1 hour charge
+            fare = current_hourly_rate  # Minimum 1 hour charge
         else:
             # Round up to nearest hour
-            fare = self.hourly_rate * (int(duration_hours) + (1 if duration_hours % 1 > 0 else 0))
+            fare = current_hourly_rate * (int(duration_hours) + (1 if duration_hours % 1 > 0 else 0))
         
         # Update existing CSV row instead of creating new one
         try:

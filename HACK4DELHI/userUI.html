@@ -21,23 +21,23 @@
             
             <div class="time-inputs">
                 <div class="input-group">
-                    <label for="inTime">🕐 In-Time (From System)</label>
-                    <input type="datetime-local" id="inTime" readonly style="background: #e9ecef; cursor: not-allowed;">
-                    <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Loaded from external file</p>
+                    <label for="vehicleSelect">🚗 Select Your Vehicle</label>
+                    <select id="vehicleSelect" style="width: 100%; padding: 12px 16px; border: 2px solid #d1d5db; border-radius: 8px; font-size: 16px; background: white; cursor: pointer;" onchange="onVehicleSelected()">
+                        <option value="">-- Select Vehicle Plate Number --</option>
+                    </select>
+                    <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Choose your parked vehicle to calculate fare</p>
                 </div>
                 <div class="input-group">
-                    <label for="outTime">🕐 Out-Time (Current Time)</label>
+                    <label for="inTime">🕐 Entry Time (From System)</label>
+                    <input type="datetime-local" id="inTime" readonly style="background: #e9ecef; cursor: not-allowed;">
+                    <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Auto-loaded when vehicle is selected</p>
+                </div>
+                <div class="input-group">
+                    <label for="outTime">🕐 Current Time</label>
                     <input type="datetime-local" id="outTime" readonly style="background: #e9ecef; cursor: not-allowed;">
                     <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Auto-updates every second</p>
                 </div>
             </div>
-
-            <div style="text-align: center; margin: 2rem 0;">
-                <button class="calculate-btn" onclick="loadInTimeFile()" style="max-width: 300px;">
-                    📁 Load In-Time File
-                </button>
-            </div>
-            <input type="file" id="fileInput" accept=".txt,.json" style="display: none;" onchange="handleFileUpload(event)">
 
             <div class="info-grid">
                 <div class="info-card" style="position: relative;">
@@ -51,7 +51,7 @@
                     <div style="position: absolute; top: 10px; right: 10px; width: 12px; height: 12px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 10px #4ade80; animation: pulse 2s infinite;" id="costIndicator"></div>
                     <h3>Parking Cost</h3>
                     <div class="value">₹<span id="cost">0</span></div>
-                    <div class="label">@ ₹5 per minute</div>
+                    <div class="label" id="rateLabel">@ ₹50 per hour</div>
                     <div style="margin-top: 1rem; font-size: 0.85rem; opacity: 0.9;">Auto-Calculated</div>
                 </div>
             </div>
@@ -124,20 +124,187 @@
         const API_BASE_URL = 'http://localhost:5000/api';
         
         let inTimeDate = null;
+        let exitTimeDate = null; // For completed transactions
         let outTimeInterval = null;
         let parkingStatusInterval = null;
+        let hourlyRate = 50; // Default, will be loaded from API
+        let parkedVehicles = [];
+        let isTransactionCompleted = false; // Track if selected vehicle has completed transaction
+        let selectedVehicleData = null; // Store full vehicle data for completed transactions
 
         // Set up on page load
         window.onload = function() {
-            // Fetch parking availability from backend
+            // Fetch config and parking availability from backend
+            fetchConfig();
             fetchParkingAvailability();
+            fetchParkedVehicles();
+            
             // Update parking availability every 5 seconds
-            parkingStatusInterval = setInterval(fetchParkingAvailability, 5000);
+            parkingStatusInterval = setInterval(function() {
+                fetchParkingAvailability();
+                fetchParkedVehicles();
+            }, 5000);
             
             // Start updating out-time every second
             updateOutTime();
             outTimeInterval = setInterval(updateOutTime, 1000);
         };
+
+        // Fetch config from backend API
+        async function fetchConfig() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/config`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                hourlyRate = data.hourly_rate || 50;
+                document.getElementById('rateLabel').textContent = `@ ₹${hourlyRate} per hour`;
+                
+                // Recalculate if vehicle is already selected
+                if (inTimeDate) {
+                    calculateParking();
+                }
+            } catch (error) {
+                console.error('Error fetching config:', error);
+            }
+        }
+
+        // Fetch all vehicles (parked and completed) from backend API
+        async function fetchParkedVehicles() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/parking/all-vehicles`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                const allVehicles = data.all_vehicles || [];
+                
+                // Update dropdown with status (Pending/Completed)
+                const select = document.getElementById('vehicleSelect');
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">-- Select Vehicle Plate Number --</option>';
+                
+                allVehicles.forEach(vehicle => {
+                    const option = document.createElement('option');
+                    const statusText = vehicle.status === 'Completed' ? 'Completed' : 'Pending';
+                    option.value = JSON.stringify(vehicle); // Store full vehicle data as value
+                    option.setAttribute('data-plate', vehicle.plate_number);
+                    option.setAttribute('data-status', vehicle.status);
+                    option.textContent = `${vehicle.plate_number} (${statusText}) - Entered: ${vehicle.entry_time}`;
+                    select.appendChild(option);
+                });
+                
+                // Restore selection if still valid (check by plate number)
+                if (currentValue) {
+                    try {
+                        const currentVehicle = JSON.parse(currentValue);
+                        const stillExists = allVehicles.find(v => 
+                            v.plate_number === currentVehicle.plate_number && 
+                            v.entry_time === currentVehicle.entry_time
+                        );
+                        if (stillExists) {
+                            // Find the option with matching plate and entry time
+                            const options = Array.from(select.options);
+                            for (let opt of options) {
+                                if (opt.value && opt.value !== '') {
+                                    const optVehicle = JSON.parse(opt.value);
+                                    if (optVehicle.plate_number === currentVehicle.plate_number &&
+                                        optVehicle.entry_time === currentVehicle.entry_time) {
+                                        select.value = opt.value;
+                                        break;
+                                    }
+                                }
+                            }
+                        } else {
+                            // Vehicle no longer exists or changed, clear selection
+                            select.value = '';
+                            inTimeDate = null;
+                            exitTimeDate = null;
+                            document.getElementById('inTime').value = '';
+                            document.getElementById('outTime').value = '';
+                            document.getElementById('duration').textContent = '--';
+                            document.getElementById('cost').textContent = '0';
+                        }
+                    } catch (e) {
+                        // Invalid stored value, clear it
+                        select.value = '';
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching vehicles:', error);
+            }
+        }
+
+        // Handle vehicle selection
+        function onVehicleSelected() {
+            const select = document.getElementById('vehicleSelect');
+            const selectedValue = select.value;
+            
+            if (!selectedValue) {
+                inTimeDate = null;
+                exitTimeDate = null;
+                isTransactionCompleted = false;
+                selectedVehicleData = null;
+                document.getElementById('inTime').value = '';
+                document.getElementById('outTime').value = '';
+                document.getElementById('duration').textContent = '--';
+                document.getElementById('cost').textContent = '0';
+                return;
+            }
+            
+            try {
+                // Parse vehicle data from JSON stored in option value
+                const vehicle = JSON.parse(selectedValue);
+                selectedVehicleData = vehicle; // Store for later use
+                
+                if (vehicle && vehicle.entry_time) {
+                    // Parse entry time (format: YYYY-MM-DD HH:MM:SS)
+                    const entryTimeStr = vehicle.entry_time.replace(' ', 'T');
+                    inTimeDate = new Date(entryTimeStr);
+                    
+                    if (!isNaN(inTimeDate.getTime())) {
+                        // Set the in-time input
+                        const displayDate = new Date(inTimeDate);
+                        displayDate.setMinutes(displayDate.getMinutes() - displayDate.getTimezoneOffset());
+                        document.getElementById('inTime').value = displayDate.toISOString().slice(0, 16);
+                        
+                        // Check if transaction is completed
+                        isTransactionCompleted = vehicle.status === 'Completed' && vehicle.exit_time && vehicle.exit_time !== '';
+                        
+                        if (isTransactionCompleted) {
+                            // For completed transactions, use actual exit time from CSV
+                            const exitTimeStr = vehicle.exit_time.replace(' ', 'T');
+                            exitTimeDate = new Date(exitTimeStr);
+                            
+                            if (!isNaN(exitTimeDate.getTime())) {
+                                const exitDisplayDate = new Date(exitTimeDate);
+                                exitDisplayDate.setMinutes(exitDisplayDate.getMinutes() - exitDisplayDate.getTimezoneOffset());
+                                document.getElementById('outTime').value = exitDisplayDate.toISOString().slice(0, 16);
+                            }
+                        } else {
+                            // For pending transactions, use current time (updated every second)
+                            exitTimeDate = null;
+                            isTransactionCompleted = false;
+                            updateOutTime(); // Set current time
+                        }
+                        
+                        // Show indicators are active
+                        document.getElementById('durationIndicator').style.display = 'block';
+                        document.getElementById('costIndicator').style.display = 'block';
+                        
+                        // Auto-calculate immediately (will use exitTimeDate if completed, otherwise current time)
+                        calculateParking();
+                    } else {
+                        alert('Error: Invalid entry time format');
+                    }
+                }
+            } catch (error) {
+                console.error('Error parsing vehicle data:', error);
+                alert('Error: Invalid vehicle data');
+                selectedVehicleData = null;
+            }
+        }
 
         // Fetch parking availability from backend API
         async function fetchParkingAvailability() {
@@ -182,65 +349,18 @@
         }
 
         function updateOutTime() {
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            document.getElementById('outTime').value = now.toISOString().slice(0, 16);
-            
-            // Auto-calculate if in-time is already loaded
-            if (inTimeDate) {
-                calculateParking();
-            }
-        }
-
-        function loadInTimeFile() {
-            document.getElementById('fileInput').click();
-        }
-
-        function handleFileUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const content = e.target.result;
-                    
-                    // Try to parse as JSON first
-                    let inTimeString;
-                    try {
-                        const jsonData = JSON.parse(content);
-                        inTimeString = jsonData.inTime || jsonData.in_time || jsonData.time || jsonData.timestamp;
-                    } catch {
-                        // If not JSON, treat as plain text
-                        inTimeString = content.trim();
-                    }
-
-                    // Parse the in-time string
-                    inTimeDate = new Date(inTimeString);
-                    
-                    if (isNaN(inTimeDate.getTime())) {
-                        alert('Invalid date format in file. Please use ISO format (YYYY-MM-DDTHH:MM:SS) or standard date format.');
-                        return;
-                    }
-
-                    // Set the in-time input
-                    const displayDate = new Date(inTimeDate);
-                    displayDate.setMinutes(displayDate.getMinutes() - displayDate.getTimezoneOffset());
-                    document.getElementById('inTime').value = displayDate.toISOString().slice(0, 16);
-                    
-                    alert('✅ In-time loaded successfully!\n' + inTimeDate.toLocaleString() + '\n\nDuration and cost will now update automatically every second.');
-                    
-                    // Show indicators are active
-                    document.getElementById('durationIndicator').style.display = 'block';
-                    document.getElementById('costIndicator').style.display = 'block';
-                    
-                    // Auto-calculate immediately
+            // Only update out-time if transaction is not completed (use current time for pending transactions)
+            if (!isTransactionCompleted) {
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                document.getElementById('outTime').value = now.toISOString().slice(0, 16);
+                
+                // Auto-calculate if in-time is already loaded
+                if (inTimeDate) {
                     calculateParking();
-                } catch (error) {
-                    alert('Error reading file: ' + error.message);
                 }
-            };
-            reader.readAsText(file);
+            }
+            // If transaction is completed, out-time is already set from CSV and doesn't need updating
         }
 
         function calculateParking() {
@@ -248,7 +368,8 @@
                 return; // Silently return if no in-time loaded yet
             }
 
-            const outTime = new Date();
+            // Use exit time from CSV if transaction is completed, otherwise use current time
+            const outTime = (isTransactionCompleted && exitTimeDate) ? exitTimeDate : new Date();
 
             if (outTime <= inTimeDate) {
                 document.getElementById('duration').textContent = '0';
@@ -256,29 +377,69 @@
                 return;
             }
 
-            // Calculate duration in minutes
+            // Calculate duration in hours
             const durationMs = outTime - inTimeDate;
+            const durationHours = durationMs / (1000 * 60 * 60);
             const durationMinutes = Math.floor(durationMs / (1000 * 60));
             
-            // Add update animation
+            // Add update animation (only if not completed transaction)
             const durationEl = document.getElementById('duration');
             const costEl = document.getElementById('cost');
             
-            durationEl.classList.add('updating');
-            costEl.classList.add('updating');
+            if (!isTransactionCompleted) {
+                durationEl.classList.add('updating');
+                costEl.classList.add('updating');
+            }
             
-            // Display duration in minutes
-            durationEl.textContent = durationMinutes;
-
-            // Calculate cost: ₹5 per minute (can be updated from backend if needed)
-            const cost = durationMinutes * 5;
-            costEl.textContent = cost;
+            // For completed transactions, use values from CSV (already calculated with correct rate at exit time)
+            // For pending transactions, calculate duration and fare based on current time and rate
+            if (isTransactionCompleted && selectedVehicleData) {
+                // Use duration and fare from CSV for completed transactions
+                if (selectedVehicleData.duration_hours !== null && selectedVehicleData.duration_hours !== undefined) {
+                    const durationMinutes = Math.floor(selectedVehicleData.duration_hours * 60);
+                    durationEl.textContent = durationMinutes;
+                } else {
+                    durationEl.textContent = durationMinutes; // Fallback to calculated
+                }
+                
+                if (selectedVehicleData.fare !== null && selectedVehicleData.fare !== undefined) {
+                    costEl.textContent = selectedVehicleData.fare.toFixed(2);
+                } else {
+                    // Fallback: calculate fare (shouldn't happen but just in case)
+                    let cost = 0;
+                    if (durationHours < 1.0) {
+                        cost = hourlyRate;
+                    } else {
+                        const hours = Math.ceil(durationHours);
+                        cost = hourlyRate * hours;
+                    }
+                    costEl.textContent = cost.toFixed(2);
+                }
+            } else {
+                // Calculate for pending transactions based on current hourly rate from MCD settings
+                // Display duration in minutes
+                durationEl.textContent = durationMinutes;
+                
+                // Minimum charge for 1 hour, then hourly rate (round up to nearest hour)
+                let cost = 0;
+                if (durationHours < 1.0) {
+                    cost = hourlyRate; // Minimum 1 hour charge
+                } else {
+                    // Round up to nearest hour
+                    const hours = Math.ceil(durationHours);
+                    cost = hourlyRate * hours;
+                }
+                
+                costEl.textContent = cost.toFixed(2);
+            }
             
-            // Remove animation after a short delay
-            setTimeout(() => {
-                durationEl.classList.remove('updating');
-                costEl.classList.remove('updating');
-            }, 300);
+            // Remove animation after a short delay (only if not completed)
+            if (!isTransactionCompleted) {
+                setTimeout(() => {
+                    durationEl.classList.remove('updating');
+                    costEl.classList.remove('updating');
+                }, 300);
+            }
         }
 
         // Clean up intervals on page unload

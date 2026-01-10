@@ -2,6 +2,10 @@ import re
 import cv2
 import easyocr
 import os
+import time
+import json
+import numpy as np
+import requests
 from datetime import datetime
 from ultralytics import YOLO
 
@@ -44,8 +48,22 @@ def main():
     
     VEHICLE_MODEL_PATH = os.path.join(project_root, "models", "yolo11n.pt")
     PLATE_MODEL_PATH = os.path.join(project_root, "models", "plate_detector.pt")
+    
+    # Load config from config.json (created/updated by MCD UI)
+    config_file_path = os.path.join(project_root, "config.json")
     MAX_CAPACITY = 2
-    HOURLY_RATE = 50  # Parking fee per hour in rupees
+    HOURLY_RATE = 50
+    if os.path.exists(config_file_path):
+        try:
+            with open(config_file_path, 'r') as f:
+                config = json.load(f)
+                MAX_CAPACITY = config.get('max_capacity', 2)
+                HOURLY_RATE = config.get('hourly_rate', 50)
+            print(f"✅ Loaded config: Max Capacity={MAX_CAPACITY}, Hourly Rate=₹{HOURLY_RATE}")
+        except Exception as e:
+            print(f"⚠️ Error loading config: {e}, using defaults")
+    else:
+        print(f"⚠️ Config file not found, using defaults: Max Capacity={MAX_CAPACITY}, Hourly Rate=₹{HOURLY_RATE}")
 
     SENDER_EMAIL = "vk.meta.1092@gmail.com"
     SENDER_PASSWORD = "ldzr svoz qvhu cort"
@@ -56,9 +74,10 @@ def main():
     csv_filename = f"parking_log_{start_time.strftime('%Y%m%d_%H%M%S')}.csv"
     CSV_LOG_PATH = os.path.join(project_root, csv_filename)
 
-    CAMERA_INDEX = 1  # Change to 0 for default camera, or use video file path like "vid.mp4"
+    CAMERA_INDEX = 0  # Change to 0 for default camera, or use video file path like "vid.mp4"
     USE_VIDEO_FILE = False  # Set to True and provide VIDEO_PATH to use video file instead
     VIDEO_PATH = os.path.join(project_root, "demo3.mp4")  # Path to video file
+    SHOW_DISPLAY = True  # Set to False if OpenCV GUI is not available or for headless operation
 
     # -------- ALERT SYSTEM --------
     alert_manager = AlertManager(
@@ -70,7 +89,7 @@ def main():
     capacity_checker = CapacityChecker(MAX_CAPACITY, alert_manager)
     
     # -------- CSV LOGGER --------
-    csv_logger = ParkingCSVLogger(CSV_LOG_PATH, hourly_rate=HOURLY_RATE)
+    csv_logger = ParkingCSVLogger(CSV_LOG_PATH, hourly_rate=HOURLY_RATE, config_file_path=config_file_path)
 
     # -------- AI MODELS --------
     print(f"📦 Loading vehicle model from: {VEHICLE_MODEL_PATH}")
@@ -128,7 +147,27 @@ def main():
     line_y = height // 2
     line_cross = LineCrossing(line_y)
 
-    print("✅ Smart Parking + ANPR System Running (Press 'q' to quit)")
+    # Check if OpenCV GUI is available
+    gui_available = False
+    if SHOW_DISPLAY:
+        try:
+            # Try to create and show a small test window to check GUI support
+            test_img = np.zeros((100, 100, 3), dtype=np.uint8)
+            cv2.imshow("test_window", test_img)
+            cv2.waitKey(1)
+            cv2.destroyWindow("test_window")
+            gui_available = True
+            print("✅ OpenCV GUI support detected")
+        except (cv2.error, AttributeError, Exception) as e:
+            print("⚠️ OpenCV GUI not available - running in headless mode")
+            print(f"💡 Error: {str(e)}")
+            print("💡 To fix this issue, reinstall opencv-python with GUI support:")
+            print("   pip uninstall opencv-python opencv-python-headless")
+            print("   pip install opencv-python")
+            gui_available = False
+            SHOW_DISPLAY = False
+    
+    print("✅ Smart Parking + ANPR System Running" + (" (Press 'q' to quit)" if gui_available else " (Headless mode)"))
     print(f"📝 CSV logs will be saved to: {CSV_LOG_PATH}")
     print(f"💰 Hourly rate: ₹{HOURLY_RATE}/hour")
 
@@ -212,7 +251,19 @@ def main():
                     if identity not in vehicle_entry_status or not vehicle_entry_status[identity].get('entered', False):
                         print(f"⚠️ WARNING: {identity} trying to exit without entry record!")
                         last_event_msg = f"{identity}: EXIT REJECTED (No entry record)"
+                        
+                        # Send illegal exit alert via email
                         alert_manager.send_illegal_parking_alert(identity, datetime.now())
+                        
+                        # Also send to API for MCD UI display
+                        try:
+                            api_url = "http://localhost:5000/api/alerts/illegal-exit"
+                            requests.post(api_url, json={
+                                'plate_number': identity,
+                                'exit_time': datetime.now().isoformat()
+                            }, timeout=2)
+                        except Exception as e:
+                            print(f"⚠️ Could not send illegal exit alert to API: {e} (API may not be running)")
                     else:
                         counter.process_event(event)
                         
@@ -397,13 +448,28 @@ def main():
         cv2.putText(frame, rate_text, (width - 250, 50),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-        cv2.imshow("Smart Parking with ANPR", frame)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        # Display frame if GUI is available
+        if SHOW_DISPLAY and gui_available:
+            try:
+                cv2.imshow("Smart Parking with ANPR", frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+            except cv2.error as e:
+                print(f"⚠️ Display error: {e}")
+                print("⚠️ Switching to headless mode...")
+                gui_available = False
+                SHOW_DISPLAY = False
+        else:
+            # Headless mode: process frames but don't display
+            # Add a small delay to avoid maxing out CPU
+            time.sleep(0.033)  # ~30 FPS
 
     cap.release()
-    cv2.destroyAllWindows()
+    if gui_available:
+        try:
+            cv2.destroyAllWindows()
+        except cv2.error:
+            pass  # Ignore errors during cleanup
     
     # -------- SEND CSV REPORT AT END --------
     print("\n" + "="*50)

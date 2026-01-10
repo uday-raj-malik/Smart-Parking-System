@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>McDonald's Parking Management System</title>
+    <title>Smart Parking Management System</title>
     <style>
         * {
             margin: 0;
@@ -582,7 +582,7 @@
                     </svg>
                 </div>
                 <div class="header-title">
-                    <h1>McDonald's</h1>
+                    <h1>Smart Parking</h1>
                     <p>Car Parking Management System</p>
                 </div>
             </div>
@@ -764,7 +764,7 @@
 
         <!-- Footer -->
         <div class="footer">
-            <p>© 2026 McDonald's Parking Management System - I'm Lovin' It</p>
+            <p>© 2026 Smart Parking Management System</p>
         </div>
     </div>
 
@@ -814,6 +814,15 @@
                     addAlert('capacity', `🚨 Capacity exceeded! Current: ${data.active_parked}, Max: ${data.max_capacity}`);
                 }
                 
+                // Add illegal exit alerts
+                if (data.illegal_exit_alerts && data.illegal_exit_alerts.length > 0) {
+                    data.illegal_exit_alerts.forEach(alert => {
+                        if (alert.type === 'illegal_exit') {
+                            addAlert('illegal_exit', alert.message || `🚨 Illegal exit: Vehicle ${alert.plate_number || 'UNKNOWN'} attempted to exit without entry record`);
+                        }
+                    });
+                }
+                
             } catch (error) {
                 console.error('Error fetching parking status:', error);
                 document.getElementById('alertsContainer').innerHTML = `
@@ -834,22 +843,28 @@
 
         // Update dashboard with data
         function updateDashboard(data) {
-            // Update occupancy
-            document.getElementById('currentOccupancy').textContent = data.active_parked || 0;
+            // Update occupancy (this is the ACTIVE parked count from CSV - should decrease on exit)
+            const activeParked = data.active_parked || 0;
+            document.getElementById('currentOccupancy').textContent = activeParked;
+            state.currentOccupancy = activeParked; // Update state
             
-            // Update max capacity
-            document.getElementById('maxCapacityDisplay').textContent = data.max_capacity || 2;
-            document.getElementById('maxCapacity').value = data.max_capacity || 2;
+            // Update max capacity (from MCD settings)
+            const maxCapacity = data.max_capacity || 2;
+            document.getElementById('maxCapacityDisplay').textContent = maxCapacity;
+            document.getElementById('maxCapacity').value = maxCapacity;
+            state.maxCapacity = maxCapacity; // Update state
             
-            // Update hourly rate
-            document.getElementById('hourlyRateDisplay').textContent = data.hourly_rate || 50;
-            document.getElementById('hourlyRate').value = data.hourly_rate || 50;
+            // Update hourly rate (from MCD settings)
+            const hourlyRate = data.hourly_rate || 50;
+            document.getElementById('hourlyRateDisplay').textContent = hourlyRate;
+            document.getElementById('hourlyRate').value = hourlyRate;
+            state.hourlyRate = hourlyRate; // Update state
             
             // Update revenue
             document.getElementById('totalRevenue').textContent = data.revenue || 0;
             
             // Update capacity indicator
-            updateCapacityIndicator(data.active_parked || 0, data.max_capacity || 2);
+            updateCapacityIndicator(activeParked, maxCapacity);
             
             // Update CSV stats
             document.getElementById('totalEntries').textContent = data.total_entries || 0;
@@ -968,8 +983,16 @@
             }
             
             container.innerHTML = state.alerts.map(alert => {
-                const alertClass = alert.type === 'capacity' ? 'error' : alert.type === 'invalid_exit' ? 'warning' : 'success';
-                const iconColor = alert.type === 'capacity' ? '#dc2626' : alert.type === 'invalid_exit' ? '#ea580c' : '#16a34a';
+                let alertClass = 'success';
+                let iconColor = '#16a34a';
+                
+                if (alert.type === 'capacity') {
+                    alertClass = 'error';
+                    iconColor = '#dc2626';
+                } else if (alert.type === 'illegal_exit' || alert.type === 'invalid_exit') {
+                    alertClass = 'warning';
+                    iconColor = '#ea580c';
+                }
                 
                 return `
                     <div class="alert-box ${alertClass}">
@@ -1012,22 +1035,74 @@
             panel.classList.toggle('active');
         }
 
-        // Update Hourly Rate (Note: This would need backend API to persist)
-        function updateRate() {
-            const rate = parseInt(document.getElementById('hourlyRate').value);
-            state.hourlyRate = rate;
-            document.getElementById('hourlyRateDisplay').textContent = rate;
-            // TODO: Send to backend API to update config
+        // Update Hourly Rate and persist to backend
+        async function updateRate() {
+            const rate = parseFloat(document.getElementById('hourlyRate').value);
+            if (isNaN(rate) || rate < 0) {
+                alert('Invalid hourly rate. Please enter a valid number.');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/config`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        max_capacity: state.maxCapacity,
+                        hourly_rate: rate
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to update rate');
+                }
+                
+                const data = await response.json();
+                state.hourlyRate = data.hourly_rate;
+                document.getElementById('hourlyRateDisplay').textContent = data.hourly_rate;
+                alert('✅ Hourly rate updated successfully!');
+            } catch (error) {
+                console.error('Error updating rate:', error);
+                alert('❌ Failed to update hourly rate: ' + error.message);
+            }
         }
 
-        // Update Maximum Capacity (Note: This would need backend API to persist)
-        function updateCapacity() {
+        // Update Maximum Capacity and persist to backend
+        async function updateCapacity() {
             const capacity = parseInt(document.getElementById('maxCapacity').value);
-            state.maxCapacity = capacity;
-            document.getElementById('maxCapacityDisplay').textContent = capacity;
-            updateCapacityIndicator(state.currentOccupancy, capacity);
-            checkCapacity(state.currentOccupancy, capacity);
-            // TODO: Send to backend API to update config
+            if (isNaN(capacity) || capacity < 1) {
+                alert('Invalid capacity. Please enter a valid number (minimum 1).');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/config`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        max_capacity: capacity,
+                        hourly_rate: state.hourlyRate
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to update capacity');
+                }
+                
+                const data = await response.json();
+                state.maxCapacity = data.max_capacity;
+                document.getElementById('maxCapacityDisplay').textContent = data.max_capacity;
+                updateCapacityIndicator(state.currentOccupancy, data.max_capacity);
+                checkCapacity(state.currentOccupancy, data.max_capacity);
+                alert('✅ Maximum capacity updated successfully!');
+            } catch (error) {
+                console.error('Error updating capacity:', error);
+                alert('❌ Failed to update capacity: ' + error.message);
+            }
         }
 
         // Initialize - Fetch data and set up auto-refresh
