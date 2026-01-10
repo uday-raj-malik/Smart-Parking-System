@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mall Parking System</title>
+    <link rel="stylesheet" href="userUI.css">
+</head>
+<body>
+    <nav>
+        <ul>
+            <li><a href="#duration">Time Duration</a></li>
+            <li><a href="#cost">Parking Cost</a></li>
+            <li><a href="#help">Help</a></li>
+        </ul>
+    </nav>
+
+    <div class="main-content">
+        <div class="dashboard">
+            <h1>Tillu Gang Parking Dashboard</h1>
+            
+            <div class="time-inputs">
+                <div class="input-group">
+                    <label for="inTime">🕐 In-Time (From System)</label>
+                    <input type="datetime-local" id="inTime" readonly style="background: #e9ecef; cursor: not-allowed;">
+                    <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Loaded from external file</p>
+                </div>
+                <div class="input-group">
+                    <label for="outTime">🕐 Out-Time (Current Time)</label>
+                    <input type="datetime-local" id="outTime" readonly style="background: #e9ecef; cursor: not-allowed;">
+                    <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Auto-updates every second</p>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin: 2rem 0;">
+                <button class="calculate-btn" onclick="loadInTimeFile()" style="max-width: 300px;">
+                    📁 Load In-Time File
+                </button>
+            </div>
+            <input type="file" id="fileInput" accept=".txt,.json" style="display: none;" onchange="handleFileUpload(event)">
+
+            <div class="info-grid">
+                <div class="info-card" style="position: relative;">
+                    <div style="position: absolute; top: 10px; right: 10px; width: 12px; height: 12px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 10px #4ade80; animation: pulse 2s infinite;" id="durationIndicator"></div>
+                    <h3>Duration</h3>
+                    <div class="value" id="duration">--</div>
+                    <div class="label">Minutes</div>
+                    <div style="margin-top: 1rem; font-size: 0.85rem; opacity: 0.9;">Live Updates</div>
+                </div>
+                <div class="info-card" style="position: relative;">
+                    <div style="position: absolute; top: 10px; right: 10px; width: 12px; height: 12px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 10px #4ade80; animation: pulse 2s infinite;" id="costIndicator"></div>
+                    <h3>Parking Cost</h3>
+                    <div class="value">₹<span id="cost">0</span></div>
+                    <div class="label">@ ₹5 per minute</div>
+                    <div style="margin-top: 1rem; font-size: 0.85rem; opacity: 0.9;">Auto-Calculated</div>
+                </div>
+            </div>
+
+            <div class="occupied-info">
+                <h2 style="color: #667eea; margin-bottom: 1.5rem;">Parking Availability</h2>
+                <div class="occupied-stats">
+                    <div class="stat-item">
+                        <div class="number" id="occupiedSpots">0</div>
+                        <div class="stat-label">Occupied Spots</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number" id="availableSpots">0</div>
+                        <div class="stat-label">Available Spots</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number" id="totalSpots">2</div>
+                        <div class="stat-label">Max Capacity</div>
+                    </div>
+                </div>
+                <div style="margin-top: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 0.9rem; color: #666; margin-bottom: 0.5rem;">Capacity Usage</div>
+                    <div style="width: 100%; height: 20px; background: #e5e7eb; border-radius: 10px; overflow: hidden; position: relative;">
+                        <div id="capacityProgress" style="height: 100%; background: linear-gradient(90deg, #10b981 0%, #059669 100%); width: 0%; transition: width 0.5s, background-color 0.5s; border-radius: 10px;"></div>
+                    </div>
+                    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;" id="capacityPercentage">0%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-section">
+                <h3>⏱️ Time Duration</h3>
+                <p>Our parking system accurately tracks the duration of your stay from check-in to check-out.</p>
+                <p>Duration is calculated in minutes.</p>
+                <p>Simple and transparent pricing: ₹5 per minute</p>
+            </div>
+
+            <div class="footer-section">
+                <h3>💰 Parking Cost</h3>
+                <p><strong>Rate: ₹5 per minute</strong></p>
+                <p>Examples:</p>
+                <ul>
+                    <li>30 minutes: ₹150</li>
+                    <li>1 hour (60 min): ₹300</li>
+                    <li>2 hours (120 min): ₹600</li>
+                    <li>Half day (6 hours): ₹1,800</li>
+                </ul>
+                <p style="margin-top: 1rem; font-size: 0.9rem;">* All rates inclusive of taxes</p>
+            </div>
+
+            <div class="footer-section">
+                <h3>❓ Help</h3>
+                <p><strong>Contact Us:</strong></p>
+                <p>📞 1800-123-4567 (Toll-free)</p>
+                <p>✉️ parking@tillugang.com</p>
+                <p style="margin-top: 1rem;"><strong>Operating Hours:</strong></p>
+                <p>24/7 - We're always here to help!</p>
+            </div>
+        </div>
+        <div class="copyright">
+            <p>&copy; 2026 Tillu Gang Parking System. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // API Configuration
+        const API_BASE_URL = 'http://localhost:5000/api';
+        
+        let inTimeDate = null;
+        let outTimeInterval = null;
+        let parkingStatusInterval = null;
+
+        // Set up on page load
+        window.onload = function() {
+            // Fetch parking availability from backend
+            fetchParkingAvailability();
+            // Update parking availability every 5 seconds
+            parkingStatusInterval = setInterval(fetchParkingAvailability, 5000);
+            
+            // Start updating out-time every second
+            updateOutTime();
+            outTimeInterval = setInterval(updateOutTime, 1000);
+        };
+
+        // Fetch parking availability from backend API
+        async function fetchParkingAvailability() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/parking/status`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                // Update parking availability display
+                const occupied = data.active_parked || 0;
+                const maxCapacity = data.max_capacity || 2;
+                const available = Math.max(0, maxCapacity - occupied);
+                const capacityPercentage = maxCapacity > 0 ? (occupied / maxCapacity * 100) : 0;
+                
+                document.getElementById('occupiedSpots').textContent = occupied;
+                document.getElementById('availableSpots').textContent = available;
+                document.getElementById('totalSpots').textContent = maxCapacity;
+                
+                // Update capacity progress bar
+                const progressBar = document.getElementById('capacityProgress');
+                progressBar.style.width = Math.min(capacityPercentage, 100) + '%';
+                document.getElementById('capacityPercentage').textContent = capacityPercentage.toFixed(1) + '%';
+                
+                // Update color based on capacity
+                progressBar.style.background = '';
+                if (occupied > maxCapacity) {
+                    progressBar.style.background = 'linear-gradient(90deg, #dc2626 0%, #b91c1c 100%)';
+                } else if (capacityPercentage > 80) {
+                    progressBar.style.background = 'linear-gradient(90deg, #eab308 0%, #ca8a04 100%)';
+                } else {
+                    progressBar.style.background = 'linear-gradient(90deg, #10b981 0%, #059669 100%)';
+                }
+                
+            } catch (error) {
+                console.error('Error fetching parking availability:', error);
+                // Show error state
+                document.getElementById('occupiedSpots').textContent = '—';
+                document.getElementById('availableSpots').textContent = '—';
+            }
+        }
+
+        function updateOutTime() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('outTime').value = now.toISOString().slice(0, 16);
+            
+            // Auto-calculate if in-time is already loaded
+            if (inTimeDate) {
+                calculateParking();
+            }
+        }
+
+        function loadInTimeFile() {
+            document.getElementById('fileInput').click();
+        }
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    
+                    // Try to parse as JSON first
+                    let inTimeString;
+                    try {
+                        const jsonData = JSON.parse(content);
+                        inTimeString = jsonData.inTime || jsonData.in_time || jsonData.time || jsonData.timestamp;
+                    } catch {
+                        // If not JSON, treat as plain text
+                        inTimeString = content.trim();
+                    }
+
+                    // Parse the in-time string
+                    inTimeDate = new Date(inTimeString);
+                    
+                    if (isNaN(inTimeDate.getTime())) {
+                        alert('Invalid date format in file. Please use ISO format (YYYY-MM-DDTHH:MM:SS) or standard date format.');
+                        return;
+                    }
+
+                    // Set the in-time input
+                    const displayDate = new Date(inTimeDate);
+                    displayDate.setMinutes(displayDate.getMinutes() - displayDate.getTimezoneOffset());
+                    document.getElementById('inTime').value = displayDate.toISOString().slice(0, 16);
+                    
+                    alert('✅ In-time loaded successfully!\n' + inTimeDate.toLocaleString() + '\n\nDuration and cost will now update automatically every second.');
+                    
+                    // Show indicators are active
+                    document.getElementById('durationIndicator').style.display = 'block';
+                    document.getElementById('costIndicator').style.display = 'block';
+                    
+                    // Auto-calculate immediately
+                    calculateParking();
+                } catch (error) {
+                    alert('Error reading file: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function calculateParking() {
+            if (!inTimeDate) {
+                return; // Silently return if no in-time loaded yet
+            }
+
+            const outTime = new Date();
+
+            if (outTime <= inTimeDate) {
+                document.getElementById('duration').textContent = '0';
+                document.getElementById('cost').textContent = '0';
+                return;
+            }
+
+            // Calculate duration in minutes
+            const durationMs = outTime - inTimeDate;
+            const durationMinutes = Math.floor(durationMs / (1000 * 60));
+            
+            // Add update animation
+            const durationEl = document.getElementById('duration');
+            const costEl = document.getElementById('cost');
+            
+            durationEl.classList.add('updating');
+            costEl.classList.add('updating');
+            
+            // Display duration in minutes
+            durationEl.textContent = durationMinutes;
+
+            // Calculate cost: ₹5 per minute (can be updated from backend if needed)
+            const cost = durationMinutes * 5;
+            costEl.textContent = cost;
+            
+            // Remove animation after a short delay
+            setTimeout(() => {
+                durationEl.classList.remove('updating');
+                costEl.classList.remove('updating');
+            }, 300);
+        }
+
+        // Clean up intervals on page unload
+        window.addEventListener('beforeunload', function() {
+            if (outTimeInterval) {
+                clearInterval(outTimeInterval);
+            }
+            if (parkingStatusInterval) {
+                clearInterval(parkingStatusInterval);
+            }
+        });
+    </script>
+</body>
+</html>

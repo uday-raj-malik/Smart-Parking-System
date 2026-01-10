@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>McDonald's Parking Management System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #fef2f2 0%, #fef3c7 100%);
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            background: #dc2626;
+            color: white;
+            padding: 24px;
+            border-radius: 16px 16px 0 0;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            background: #facc15;
+            padding: 12px;
+            border-radius: 50%;
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo svg {
+            width: 32px;
+            height: 32px;
+            fill: #dc2626;
+        }
+
+        .header-title h1 {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .header-title p {
+            color: #fecaca;
+            font-size: 14px;
+        }
+
+        .settings-btn {
+            background: white;
+            color: #dc2626;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.3s;
+        }
+
+        .settings-btn:hover {
+            background: #fef2f2;
+        }
+
+        /* Settings Panel */
+        .settings-panel {
+            background: white;
+            border-left: 4px solid #dc2626;
+            border-right: 4px solid #dc2626;
+            padding: 24px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+
+        .settings-panel.active {
+            display: block;
+        }
+
+        .settings-panel h2 {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 16px;
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 24px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #dc2626;
+        }
+
+        /* Main Dashboard */
+        .dashboard {
+            background: white;
+            border-left: 4px solid #dc2626;
+            border-right: 4px solid #dc2626;
+            padding: 24px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            padding: 16px;
+            border-radius: 12px;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stat-card.blue {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+
+        .stat-card.green {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .stat-card.purple {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        }
+
+        .stat-card.yellow {
+            background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%);
+        }
+
+        .stat-info p:first-child {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-bottom: 4px;
+        }
+
+        .stat-info p:last-child {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            opacity: 0.8;
+        }
+
+        /* Capacity Indicator */
+        .capacity-section {
+            margin-bottom: 24px;
+        }
+
+        .capacity-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .capacity-header span {
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 16px;
+            background: #e5e7eb;
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 9999px;
+            transition: width 0.5s, background-color 0.5s;
+        }
+
+        .progress-fill.green {
+            background: #10b981;
+        }
+
+        .progress-fill.yellow {
+            background: #eab308;
+        }
+
+        .progress-fill.red {
+            background: #dc2626;
+        }
+
+        /* Alerts */
+        .alerts-section {
+            margin-bottom: 24px;
+        }
+
+        .alerts-section h3 {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .alerts-container {
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
+        .alert-box {
+            border: 1px solid;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 8px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .alert-box.success {
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+        }
+
+        .alert-box.error {
+            background: #fef2f2;
+            border-color: #fecaca;
+        }
+
+        .alert-box.warning {
+            background: #fff7ed;
+            border-color: #fed7aa;
+        }
+
+        .alert-icon {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .alert-content {
+            flex: 1;
+        }
+
+        .alert-message {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .alert-box.success .alert-message {
+            color: #166534;
+        }
+
+        .alert-box.error .alert-message {
+            color: #991b1b;
+        }
+
+        .alert-box.warning .alert-message {
+            color: #9a3412;
+        }
+
+        .alert-time {
+            font-size: 14px;
+            color: #6b7280;
+        }
+
+        /* Test Controls */
+        .test-controls {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+
+        .test-controls h4 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 12px;
+        }
+
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform 0.2s, opacity 0.3s;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn.red {
+            background: #dc2626;
+        }
+
+        .btn.orange {
+            background: #ea580c;
+        }
+
+        .btn.blue {
+            background: #2563eb;
+        }
+
+        .btn.green {
+            background: #16a34a;
+        }
+
+        .btn-icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* CSV Section */
+        .csv-section {
+            border-top: 1px solid #e5e7eb;
+            padding-top: 24px;
+        }
+
+        .csv-section h3 {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .csv-upload-area {
+            background: #f9fafb;
+            border: 2px dashed #d1d5db;
+            border-radius: 8px;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .csv-upload-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .upload-btn {
+            background: #dc2626;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.3s;
+        }
+
+        .upload-btn:hover {
+            background: #b91c1c;
+        }
+
+        .download-template {
+            color: #dc2626;
+            text-decoration: underline;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .download-template:hover {
+            color: #b91c1c;
+        }
+
+        .csv-stats {
+            margin-top: 16px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            display: none;
+        }
+
+        .csv-stats.active {
+            display: block;
+        }
+
+        .csv-filename {
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 12px;
+        }
+
+        .csv-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            text-align: center;
+        }
+
+        .csv-stat-item p:first-child {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .csv-stat-item p:last-child {
+            font-size: 14px;
+            color: #6b7280;
+        }
+
+        .csv-stat-item.blue p:first-child {
+            color: #2563eb;
+        }
+
+        .csv-stat-item.green p:first-child {
+            color: #16a34a;
+        }
+
+        .csv-stat-item.purple p:first-child {
+            color: #7c3aed;
+        }
+
+        /* Footer */
+        .footer {
+            background: #dc2626;
+            color: white;
+            padding: 16px;
+            border-radius: 0 0 16px 16px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .footer p {
+            font-size: 14px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .csv-stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* CSV Data Table Styles */
+        #csvDataTable {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #csvDataTable thead tr {
+            background: #f9fafb;
+        }
+
+        #csvDataTable th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #374151;
+            border-bottom: 2px solid #e5e7eb;
+            font-size: 14px;
+        }
+
+        #csvDataTable td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #1f2937;
+            font-size: 14px;
+        }
+
+        #csvDataTable tbody tr:hover {
+            background: #f9fafb;
+        }
+
+        #csvDataTable tbody tr:last-child td {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M5 17h14v3H5v-3z"></path>
+                        <path d="M16 6l3 5H5l3-5h8z"></path>
+                        <circle cx="7.5" cy="17" r="1.5"></circle>
+                        <circle cx="16.5" cy="17" r="1.5"></circle>
+                    </svg>
+                </div>
+                <div class="header-title">
+                    <h1>McDonald's</h1>
+                    <p>Car Parking Management System</p>
+                </div>
+            </div>
+            <button class="settings-btn" onclick="toggleSettings()">
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M12 1v6m0 6v6m8.66-15.66l-4.24 4.24m-8.48 0L3.34 3.34m17.32 17.32l-4.24-4.24m-8.48 0l-4.24 4.24M1 12h6m6 0h6"></path>
+                </svg>
+                Settings
+            </button>
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="settings-panel" id="settingsPanel">
+            <h2>Parking Configuration</h2>
+            <div class="settings-grid">
+                <div class="form-group">
+                    <label for="hourlyRate">Hourly Rate (₹)</label>
+                    <input type="number" id="hourlyRate" value="50" min="0" onchange="updateRate()">
+                </div>
+                <div class="form-group">
+                    <label for="maxCapacity">Maximum Capacity</label>
+                    <input type="number" id="maxCapacity" value="2" min="1" onchange="updateCapacity()">
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div class="dashboard">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card blue">
+                    <div class="stat-info">
+                        <p>Current Occupancy</p>
+                        <p id="currentOccupancy">0</p>
+                    </div>
+                    <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </div>
+
+                <div class="stat-card green">
+                    <div class="stat-info">
+                        <p>Max Capacity</p>
+                        <p id="maxCapacityDisplay">2</p>
+                    </div>
+                    <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M5 17h14v3H5v-3z"></path>
+                        <path d="M16 6l3 5H5l3-5h8z"></path>
+                        <circle cx="7.5" cy="17" r="1.5"></circle>
+                        <circle cx="16.5" cy="17" r="1.5"></circle>
+                    </svg>
+                </div>
+
+                <div class="stat-card purple">
+                    <div class="stat-info">
+                        <p>Hourly Rate</p>
+                        <p>₹<span id="hourlyRateDisplay">50</span></p>
+                    </div>
+                    <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                </div>
+
+                <div class="stat-card yellow">
+                    <div class="stat-info">
+                        <p>Today's Revenue</p>
+                        <p>₹<span id="totalRevenue">0</span></p>
+                    </div>
+                    <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Capacity Indicator -->
+            <div class="capacity-section">
+                <div class="capacity-header">
+                    <span>Capacity Usage</span>
+                    <span id="capacityPercentage">0.0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill green" id="progressFill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Alert Notifications -->
+            <div class="alerts-section">
+                <h3>
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    Alert Notifications
+                </h3>
+                <div class="alerts-container" id="alertsContainer">
+                    <div class="alert-box success">
+                        <svg class="alert-icon" fill="none" stroke="#16a34a" viewBox="0 0 24 24">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <div class="alert-content">
+                            <div class="alert-message">No alerts - All systems normal</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CSV Data Display Section -->
+            <div class="csv-section">
+                <h3>
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Parking Entry/Exit Logs
+                    <span style="font-size: 14px; font-weight: normal; margin-left: 12px; color: #6b7280;" id="csvFilenameDisplay"></span>
+                </h3>
+                
+                <!-- CSV Stats Summary -->
+                <div class="csv-stats active" id="csvStats">
+                    <div class="csv-stats-grid">
+                        <div class="csv-stat-item blue">
+                            <p id="totalEntries">0</p>
+                            <p>Total Entries</p>
+                        </div>
+                        <div class="csv-stat-item green">
+                            <p id="totalExits">0</p>
+                            <p>Total Exits</p>
+                        </div>
+                        <div class="csv-stat-item purple">
+                            <p>₹<span id="csvRevenue">0</span></p>
+                            <p>Total Revenue</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CSV Data Table -->
+                <div style="margin-top: 24px; overflow-x: auto;">
+                    <table id="csvDataTable" style="width: 100%; border-collapse: collapse; background: white; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+                        <thead>
+                            <tr style="background: #f9fafb;">
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; border-bottom: 2px solid #e5e7eb;">Entry Time</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; border-bottom: 2px solid #e5e7eb;">Exit Time</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; border-bottom: 2px solid #e5e7eb;">Plate Number</th>
+                                <th style="padding: 12px; text-align: right; font-weight: 600; color: #374151; border-bottom: 2px solid #e5e7eb;">Duration (hrs)</th>
+                                <th style="padding: 12px; text-align: right; font-weight: 600; color: #374151; border-bottom: 2px solid #e5e7eb;">Fare (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="csvTableBody">
+                            <tr>
+                                <td colspan="5" style="padding: 24px; text-align: center; color: #6b7280;">Loading data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Download CSV Button -->
+                <div style="margin-top: 16px; text-align: center;">
+                    <button class="upload-btn" onclick="downloadCSV()" style="background: #2563eb;">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Download CSV File
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>© 2026 McDonald's Parking Management System - I'm Lovin' It</p>
+        </div>
+    </div>
+
+    <script>
+        // API Configuration
+        const API_BASE_URL = 'http://localhost:5000/api';
+        
+        // Global state
+        let state = {
+            hourlyRate: 50,
+            maxCapacity: 2,
+            currentOccupancy: 0,
+            alerts: [],
+            stats: {
+                totalEntries: 0,
+                totalExits: 0,
+                revenue: 0
+            },
+            refreshInterval: null
+        };
+
+        // Fetch parking status from backend API
+        async function fetchParkingStatus() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/parking/status`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                // Update state
+                state.maxCapacity = data.max_capacity || 2;
+                state.currentOccupancy = data.active_parked || 0;
+                state.hourlyRate = data.hourly_rate || 50;
+                state.stats = {
+                    totalEntries: data.total_entries || 0,
+                    totalExits: data.total_exits || 0,
+                    revenue: data.revenue || 0
+                };
+                
+                // Update UI
+                updateDashboard(data);
+                updateCSVTable(data.entries || []);
+                
+                // Check for alerts
+                if (data.is_over_capacity) {
+                    addAlert('capacity', `🚨 Capacity exceeded! Current: ${data.active_parked}, Max: ${data.max_capacity}`);
+                }
+                
+            } catch (error) {
+                console.error('Error fetching parking status:', error);
+                document.getElementById('alertsContainer').innerHTML = `
+                    <div class="alert-box error">
+                        <svg class="alert-icon" fill="none" stroke="#dc2626" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <div class="alert-content">
+                            <div class="alert-message">⚠️ Cannot connect to backend API. Make sure backend_api.py is running on port 5000.</div>
+                            <div class="alert-time">Check console for details</div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Update dashboard with data
+        function updateDashboard(data) {
+            // Update occupancy
+            document.getElementById('currentOccupancy').textContent = data.active_parked || 0;
+            
+            // Update max capacity
+            document.getElementById('maxCapacityDisplay').textContent = data.max_capacity || 2;
+            document.getElementById('maxCapacity').value = data.max_capacity || 2;
+            
+            // Update hourly rate
+            document.getElementById('hourlyRateDisplay').textContent = data.hourly_rate || 50;
+            document.getElementById('hourlyRate').value = data.hourly_rate || 50;
+            
+            // Update revenue
+            document.getElementById('totalRevenue').textContent = data.revenue || 0;
+            
+            // Update capacity indicator
+            updateCapacityIndicator(data.active_parked || 0, data.max_capacity || 2);
+            
+            // Update CSV stats
+            document.getElementById('totalEntries').textContent = data.total_entries || 0;
+            document.getElementById('totalExits').textContent = data.total_exits || 0;
+            document.getElementById('csvRevenue').textContent = data.revenue || 0;
+            
+            // Update CSV filename
+            if (data.csv_filename) {
+                document.getElementById('csvFilenameDisplay').textContent = `(${data.csv_filename})`;
+            }
+        }
+
+        // Update CSV data table
+        function updateCSVTable(entries) {
+            const tbody = document.getElementById('csvTableBody');
+            
+            if (!entries || entries.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="padding: 24px; text-align: center; color: #6b7280;">No parking entries found</td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = entries.map(entry => {
+                const entryTime = entry.entry_time || '—';
+                const exitTime = entry.exit_time || '—';
+                const plate = entry.plate_number || '—';
+                const duration = entry.duration_hours !== null && entry.duration_hours !== undefined 
+                    ? entry.duration_hours.toFixed(2) 
+                    : '—';
+                const fare = entry.fare !== null && entry.fare !== undefined 
+                    ? entry.fare.toFixed(2) 
+                    : '—';
+                
+                // Highlight active parking (no exit time)
+                const rowStyle = !entry.exit_time || entry.exit_time === '' 
+                    ? 'background: #fef3c7;' 
+                    : '';
+                
+                return `
+                    <tr style="${rowStyle}">
+                        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${entryTime}</td>
+                        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${exitTime}</td>
+                        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${plate}</td>
+                        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${duration}</td>
+                        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: 600; color: #16a34a;">${fare}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Update Capacity Indicator
+        function updateCapacityIndicator(currentOccupancy, maxCapacity) {
+            const percentage = maxCapacity > 0 ? (currentOccupancy / maxCapacity) * 100 : 0;
+            const progressFill = document.getElementById('progressFill');
+            const percentageDisplay = document.getElementById('capacityPercentage');
+            
+            progressFill.style.width = Math.min(percentage, 100) + '%';
+            percentageDisplay.textContent = percentage.toFixed(1) + '%';
+            
+            // Update color based on capacity
+            progressFill.classList.remove('green', 'yellow', 'red');
+            if (currentOccupancy > maxCapacity) {
+                progressFill.classList.add('red');
+            } else if (currentOccupancy > maxCapacity * 0.8) {
+                progressFill.classList.add('yellow');
+            } else {
+                progressFill.classList.add('green');
+            }
+        }
+
+        // Check Capacity and add alerts
+        function checkCapacity(currentOccupancy, maxCapacity) {
+            if (currentOccupancy > maxCapacity) {
+                addAlert('capacity', `🚨 Capacity exceeded! Current: ${currentOccupancy}, Max: ${maxCapacity}`);
+            }
+        }
+
+        // Add Alert
+        function addAlert(type, message) {
+            // Check if alert already exists
+            const existingAlert = state.alerts.find(a => a.message === message && a.type === type);
+            if (existingAlert) return;
+            
+            const alert = {
+                id: Date.now(),
+                type: type,
+                message: message,
+                timestamp: new Date().toLocaleTimeString()
+            };
+            
+            state.alerts.unshift(alert);
+            state.alerts = state.alerts.slice(0, 10); // Keep last 10
+            renderAlerts();
+        }
+
+        // Render Alerts
+        function renderAlerts() {
+            const container = document.getElementById('alertsContainer');
+            
+            if (state.alerts.length === 0) {
+                container.innerHTML = `
+                    <div class="alert-box success">
+                        <svg class="alert-icon" fill="none" stroke="#16a34a" viewBox="0 0 24 24">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <div class="alert-content">
+                            <div class="alert-message">No alerts - All systems normal</div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = state.alerts.map(alert => {
+                const alertClass = alert.type === 'capacity' ? 'error' : alert.type === 'invalid_exit' ? 'warning' : 'success';
+                const iconColor = alert.type === 'capacity' ? '#dc2626' : alert.type === 'invalid_exit' ? '#ea580c' : '#16a34a';
+                
+                return `
+                    <div class="alert-box ${alertClass}">
+                        <svg class="alert-icon" fill="none" stroke="${iconColor}" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <div class="alert-content">
+                            <div class="alert-message">${alert.message}</div>
+                            <div class="alert-time">${alert.timestamp}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Download CSV File
+        async function downloadCSV() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/parking/csv`);
+                if (!response.ok) {
+                    throw new Error('CSV file not found');
+                }
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'parking_log.csv';
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                alert('Error downloading CSV: ' + error.message);
+            }
+        }
+
+        // Toggle Settings Panel
+        function toggleSettings() {
+            const panel = document.getElementById('settingsPanel');
+            panel.classList.toggle('active');
+        }
+
+        // Update Hourly Rate (Note: This would need backend API to persist)
+        function updateRate() {
+            const rate = parseInt(document.getElementById('hourlyRate').value);
+            state.hourlyRate = rate;
+            document.getElementById('hourlyRateDisplay').textContent = rate;
+            // TODO: Send to backend API to update config
+        }
+
+        // Update Maximum Capacity (Note: This would need backend API to persist)
+        function updateCapacity() {
+            const capacity = parseInt(document.getElementById('maxCapacity').value);
+            state.maxCapacity = capacity;
+            document.getElementById('maxCapacityDisplay').textContent = capacity;
+            updateCapacityIndicator(state.currentOccupancy, capacity);
+            checkCapacity(state.currentOccupancy, capacity);
+            // TODO: Send to backend API to update config
+        }
+
+        // Initialize - Fetch data and set up auto-refresh
+        window.addEventListener('DOMContentLoaded', function() {
+            // Fetch initial data
+            fetchParkingStatus();
+            
+            // Set up auto-refresh every 5 seconds
+            state.refreshInterval = setInterval(fetchParkingStatus, 5000);
+            
+            // Initial capacity indicator update
+            updateCapacityIndicator(state.currentOccupancy, state.maxCapacity);
+        });
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            if (state.refreshInterval) {
+                clearInterval(state.refreshInterval);
+            }
+        });
+    </script>
+</body>
+</html>
