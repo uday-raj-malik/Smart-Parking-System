@@ -110,6 +110,8 @@ def parse_csv_data(csv_path):
             # Check if vehicle is still parked (has entry but no exit)
             if entry_time != '' and exit_time == '':
                 active_parked += 1
+            if entry_time != '' and exit_time != '':
+                active_parked -= 1
             
             # Calculate revenue (only from completed exits)
             if pd.notna(fare_val) and fare_val != '':
@@ -148,7 +150,7 @@ def parse_csv_data(csv_path):
             })
         
         # Count total entries (rows with entry_time) and exits (rows with both entry and exit)
-        total_entries = len([e for e in entries if e['entry_time'] != ''])
+        total_entries = len([e for e in entries if e['entry_time'] != '' and e['exit_time'] == ''])
         total_exits = len([e for e in entries if e['entry_time'] != '' and e['exit_time'] != ''])
         
         # Get list of all vehicles (both parked and completed) for user UI dropdown
